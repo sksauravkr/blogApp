@@ -1,0 +1,71 @@
+package com.blog.api.services.impl;
+
+import java.util.List;
+
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.blog.api.entities.Category;
+import com.blog.api.entities.Post;
+import com.blog.api.payloads.CategoryDto;
+import com.blog.api.payloads.PostDto;
+import com.blog.api.repositories.PostRepo;
+import com.blog.api.services.PostService;
+
+public class PostServiceImpl implements PostService {
+	
+	@Autowired
+	PostRepo postRepo;
+	
+	@Autowired
+	ModelMapper modelMapper;
+	
+	@Override
+	public Post createPost(PostDto postDto) {
+		postRepo.save(postDto)
+		return null;
+	}
+
+	@Override
+	public Post updatePst(PostDto postDto, Integer postId) {
+		return null;
+	}
+
+	@Override
+	public void deletePost(Integer postId) {
+
+	}
+
+	@Override
+	public List<Post> getAllPost() {
+		return null;
+	}
+
+	@Override
+	public Post getPostById(Integer postId) {
+		return null;
+	}
+
+	@Override
+	public List<Post> getPostByCategory(Integer categoryId) {
+		return null;
+	}
+
+	@Override
+	public List<Post> getPostByUser(Integer userId) {
+		return null;
+	}
+	
+	public Category dtoToCategory(CategoryDto categoryDto) {
+		
+		Category category = modelMapper.map(categoryDto, Category.class);
+		return category;
+	}
+	
+	public CategoryDto categoryToDto(Category category) {
+		
+		CategoryDto categoryDto = modelMapper.map(category, CategoryDto.class);
+		return categoryDto;
+	}
+
+}

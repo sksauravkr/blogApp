@@ -1,0 +1,192 @@
+package com.broadcom.support.scheduler;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+
+import org.apache.commons.collections.CollectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import com.broadcom.support.constants.SoftwareDeliveryConstant;
+import com.broadcom.support.exception.RequestException;
+import com.broadcom.support.mail.utility.EmailSender;
+import com.broadcom.support.model.SendEmailVO;
+import com.broadcom.support.model.TemplateVO;
+import com.broadcom.support.service.ITemplateComponentService;
+import com.broadcom.support.service.SWOtherFilesConfigService;
+import com.broadcom.support.service.SchedulerLockService;
+import com.broadcom.support.service.SwRequestAndApprovalService;
+import com.broadcom.support.util.EmailResourceLoader;
+import com.broadcom.support.util.SchedulerTypeConstants;
+
+@Component
+public class SWRequestApprovalNotificationReminderScheduler {
+	
+
+	@Autowired
+	SWOtherFilesConfigService sWOtherFilesConfigService;
+	
+	@Autowired
+	private ITemplateComponentService iTemplateComponentService;
+	
+	@Autowired
+	SwRequestAndApprovalService swRequestAndApprovalService;
+	
+	@Autowired
+	private EmailSender emailSender;
+	
+	@Autowired
+	private EmailResourceLoader resourceLoader;
+
+	@Value("${scheduler.enable}")
+	private boolean enableScheduler;
+	
+
+	@Value("${CSPBaseURL}")
+	private String cSPBaseURL;	
+	
+	@Value("${SWRequestApprovalURL}")
+	private String swRequestApprovalURL;
+	
+	@Autowired
+	private SchedulerLockService schedulerLock;
+	
+		String targetURL= "";
+		
+		
+		public static final int SW_REQUEST_TYPE = 1;
+		
+		private final Logger log = LoggerFactory.getLogger(this.getClass());
+		
+		@Scheduled(cron = "${softwarerequestapprovalemailnotification-cron.execution.frequency:* * * * *}")
+		public void sendSWReqApprovalReminderEmailNotification() throws  RequestException {
+
+			String ip = schedulerLock.getIp();
+			log.info("Scheduler ip::: {}" , ip);
+			String schedulerName = SchedulerTypeConstants.SOFTWARE_REQUEST_NOTIFICATION_REMINDER;
+			
+			
+			if (enableScheduler && schedulerLock.startLock(schedulerName, ip)) {
+			log.info("Scheduler Lock is on");
+			log.info("Start of schedule");
+			List<Object[]> list1 = swRequestAndApprovalService.getAllPendingRequests(SWRequestApprovalNotificationReminderScheduler.SW_REQUEST_TYPE);
+			
+			//list1 is the list of all pending requests in the system
+
+			if(null != list1 && !list1.isEmpty()) {
+			
+				for (Object[] swRequest : list1) {
+					long swRequestID = Long.parseLong((String) swRequest[0].toString());
+				processPendigRequest(swRequestID);
+				}
+			}
+			}
+	
+			schedulerLock.releaseLock(schedulerName, ip);
+			log.info("Scheduler Lock is released");
+			}
+
+		private void processPendigRequest(long swRequestID) {
+			try {
+			List<Object[]> pendingRequestList  = swRequestAndApprovalService.getApproverPendingRequests(swRequestID);
+				
+			if(null != pendingRequestList && !pendingRequestList.isEmpty()) {
+			
+			for (Object[] obj1 : pendingRequestList) {
+				targetURL = "";
+				targetURL=cSPBaseURL.concat(swRequestApprovalURL);
+				
+				processToSendEmail(swRequestID, pendingRequestList, obj1);
+			}
+			}
+			
+			} catch (Exception e) {
+				log.error("Error:" + e.getMessage());
+			}
+		}
+
+		private void processToSendEmail(long swRequestID, List<Object[]> pendingRequestList, Object[] obj1) throws  SQLException, IOException {
+			String fromAddress;
+			
+			String requestDate = null;
+			String noOfDaysPending = null;
+			String userCount = null;
+			String swCount = null;
+			String swRequestAndCompany = null;
+			String approverFullName = null;
+			String approverEmaillatest = null;
+			
+			requestDate = obj1[1].toString();
+			noOfDaysPending = obj1[5].toString();
+			log.info("noOfDaysPending in PLM file reminder: {}", noOfDaysPending);
+
+			userCount = obj1[6].toString();
+			swCount = obj1[9].toString();
+			swRequestAndCompany = obj1[4].toString();
+			approverFullName = obj1[7].toString();
+			approverEmaillatest = obj1[8].toString();
+			if (CollectionUtils.isNotEmpty(pendingRequestList)) {
+				
+				TemplateVO templateVO = iTemplateComponentService.fetchTemplateByName(SoftwareDeliveryConstant.SOFTWARE_REQUEST_NOTIFICATION_SUMMARY_REMINDER);
+
+				String approverNotificationBody = templateVO.getBody();
+				StringBuilder allRequestSummary = new StringBuilder();
+				String misc = templateVO.getMisc();
+				fromAddress = templateVO.getFromAddress();
+				targetURL=targetURL.concat(String.valueOf(swRequestID));
+				misc = misc.replace("[URL]/group/customers/sds?"
+						+ "p_p_id=sds_WAR_DownloadCenterportlet&p_p_lifecycle=0&p_p_state=normal"
+						+ "&p_p_mode=view&p_p_col_id=column-1&p_p_col_count=1&_sds_WAR_DownloadCenterportlet"
+						+ "_action=PendingEixstingRequests", targetURL);
+				String subject = templateVO.getSubject();
+				String fromName = templateVO.getName();
+				// Get one summary html from Misc value stored in Templates table
+				String requestValuesHtmlRow = misc;
+				// Store a copy of actual misc column value
+				if (approverNotificationBody != "") {
+					
+					
+					
+			subject = subject.replace("[CSPENV]", "[" + cSPBaseURL + "]");
+			subject = subject.replace("##", swRequestAndCompany);
+			approverNotificationBody = approverNotificationBody.replace("[ApproverFullName]", approverFullName);
+			requestValuesHtmlRow = requestValuesHtmlRow.replace("[RequestDate]", requestDate);
+			requestValuesHtmlRow = requestValuesHtmlRow.replace("[#DaysPending]", noOfDaysPending);
+			requestValuesHtmlRow = requestValuesHtmlRow.replace("[SWRequest#]:[Company]", "#"+ swRequestAndCompany);
+			requestValuesHtmlRow = requestValuesHtmlRow.replace("[#Users]", userCount);
+			requestValuesHtmlRow = requestValuesHtmlRow.replace("[#Softwares]", swCount);
+			allRequestSummary.append(requestValuesHtmlRow);
+			approverNotificationBody = approverNotificationBody.replace("[SummaryRow]",allRequestSummary.toString());
+			
+
+			SendEmailVO sendEmailVo = new SendEmailVO(); 
+			sendEmailVo.setFrom(fromAddress);
+			sendEmailVo.setTo(approverEmaillatest);
+			sendEmailVo.setCcEmail("");
+			sendEmailVo.setBccEmail("");
+			sendEmailVo.setFinalBody(approverNotificationBody);
+			swRequestAndApprovalService.addEmailNotification(subject,fromName, sendEmailVo,
+					"html", new Date(), new Date(),  1L);
+
+					log.info("record inserted for PLM reminder");
+
+				}
+				emailSender.init(resourceLoader.getEmailEventsResource().getInputStream(),
+						resourceLoader.getResourceBundle(), "SEND_CUSTOMIZE_E-MAIL");
+
+				emailSender.setAdditionalDataForDynamicEmail(fromAddress, Arrays.asList(approverEmaillatest.split(",")),
+						Collections.emptyList(), subject, approverNotificationBody, "");
+				emailSender.send();
+				log.info("Mail sent to User for Existing SW Request Notification Summary Reminder");
+			}
+		}
+
+}

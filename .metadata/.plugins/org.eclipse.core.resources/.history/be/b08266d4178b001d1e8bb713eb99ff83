@@ -1,0 +1,47 @@
+package com.blog.api.services.impl;
+
+import java.util.List;
+
+import com.blog.api.entities.Post;
+import com.blog.api.payloads.PostDto;
+import com.blog.api.services.PostService;
+
+public class PostServiceImpl implements PostService {
+
+	@Override
+	public Post createPost(PostDto postDto) {
+		
+		return null;
+	}
+
+	@Override
+	public Post updatePst(PostDto postDto, Integer postId) {
+		return null;
+	}
+
+	@Override
+	public void deletePost(Integer postId) {
+
+	}
+
+	@Override
+	public List<Post> getAllPost() {
+		return null;
+	}
+
+	@Override
+	public Post getPostById(Integer postId) {
+		return null;
+	}
+
+	@Override
+	public List<Post> getPostByCategory(Integer categoryId) {
+		return null;
+	}
+
+	@Override
+	public List<Post> getPostByUser(Integer userId) {
+		return null;
+	}
+
+}
